@@ -4,9 +4,33 @@ import cv2
 import json
 from PIL import Image
 import numpy as np
+import logging
+import sys
+from datetime import datetime
+
+# ロギング設定
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info("="*60)
+logger.info("CaptureSpace - Object Detection App Starting")
+logger.info(f"Gradio version: {gr.__version__}")
+logger.info("="*60)
 
 # YOLOv8nモデルをロード（軽量でCPU動作に適している）
-model = YOLO('yolov8n.pt')
+logger.info("Loading YOLOv8n model...")
+try:
+    model = YOLO('yolov8n.pt')
+    logger.info("✓ YOLOv8n model loaded successfully")
+except Exception as e:
+    logger.error(f"✗ Failed to load YOLO model: {e}")
+    raise
 
 def detect_objects(image):
     """
@@ -18,40 +42,79 @@ def detect_objects(image):
     Returns:
         tuple: (バウンディングボックス付き画像, JSON文字列)
     """
-    if image is None:
-        return None, json.dumps({"error": "画像が提供されていません"}, ensure_ascii=False, indent=2)
+    logger.info("="*60)
+    logger.info(f"detect_objects called at {datetime.now()}")
+    logger.info(f"Image type: {type(image)}")
+    logger.info(f"Image is None: {image is None}")
 
-    # PIL ImageをNumPy配列に変換
-    if isinstance(image, Image.Image):
-        image = np.array(image)
+    try:
+        if image is None:
+            logger.warning("No image provided")
+            error_msg = json.dumps({"error": "画像が提供されていません"}, ensure_ascii=False, indent=2)
+            return None, error_msg
 
-    # YOLOv8で推論実行
-    results = model(image)
+        logger.info(f"Image shape: {image.shape if hasattr(image, 'shape') else 'N/A'}")
 
-    # 検出された物体の名称を収集（重複なし）
-    detected_objects = set()
+        # PIL ImageをNumPy配列に変換
+        if isinstance(image, Image.Image):
+            logger.info("Converting PIL Image to numpy array")
+            image = np.array(image)
 
-    for result in results:
-        # バウンディングボックス付きの画像を取得
-        annotated_image = result.plot()
+        # YOLOv8で推論実行
+        logger.info("Running YOLO inference...")
+        results = model(image)
+        logger.info(f"✓ Inference completed, got {len(results)} result(s)")
 
-        # 検出されたクラス名を取得
-        if result.boxes is not None:
-            for box in result.boxes:
-                class_id = int(box.cls[0])
-                class_name = model.names[class_id]
-                detected_objects.add(class_name)
+        # 検出された物体の名称を収集（重複なし）
+        detected_objects = set()
 
-    # JSONフォーマットで出力
-    output_json = {
-        "detected_objects": sorted(list(detected_objects))
-    }
-    json_string = json.dumps(output_json, ensure_ascii=False, indent=2)
+        for i, result in enumerate(results):
+            logger.info(f"Processing result {i+1}/{len(results)}")
 
-    # RGB形式に変換（GradioはRGBを期待）
-    annotated_image_rgb = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+            # バウンディングボックス付きの画像を取得
+            annotated_image = result.plot()
+            logger.info(f"✓ Annotated image created, shape: {annotated_image.shape}")
 
-    return annotated_image_rgb, json_string
+            # 検出されたクラス名を取得
+            if result.boxes is not None:
+                num_boxes = len(result.boxes)
+                logger.info(f"Found {num_boxes} object(s)")
+
+                for j, box in enumerate(result.boxes):
+                    class_id = int(box.cls[0])
+                    class_name = model.names[class_id]
+                    confidence = float(box.conf[0])
+                    detected_objects.add(class_name)
+                    logger.info(f"  Object {j+1}: {class_name} (confidence: {confidence:.2f})")
+            else:
+                logger.info("No objects detected")
+
+        # JSONフォーマットで出力
+        output_json = {
+            "detected_objects": sorted(list(detected_objects)),
+            "count": len(detected_objects),
+            "timestamp": datetime.now().isoformat()
+        }
+        json_string = json.dumps(output_json, ensure_ascii=False, indent=2)
+        logger.info(f"✓ JSON output created: {json_string}")
+
+        # RGB形式に変換（GradioはRGBを期待）
+        annotated_image_rgb = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+        logger.info(f"✓ Image converted to RGB, shape: {annotated_image_rgb.shape}")
+
+        logger.info("✓ detect_objects completed successfully")
+        logger.info("="*60)
+
+        return annotated_image_rgb, json_string
+
+    except Exception as e:
+        logger.error(f"✗ Error in detect_objects: {e}", exc_info=True)
+        error_json = json.dumps({
+            "error": str(e),
+            "type": type(e).__name__,
+            "timestamp": datetime.now().isoformat()
+        }, ensure_ascii=False, indent=2)
+        return None, error_json
 
 # カスタムCSS（モバイル最適化）
 custom_css = """
@@ -93,6 +156,8 @@ textarea {
 }
 """
 
+logger.info("Building Gradio interface...")
+
 # Gradioインターフェースの構築
 with gr.Blocks(css=custom_css, title="物体認識アプリ") as demo:
     gr.Markdown("# 📱 物体認識アプリ")
@@ -127,6 +192,7 @@ with gr.Blocks(css=custom_css, title="物体認識アプリ") as demo:
             )
 
     # ボタンクリック時の処理
+    logger.info("Setting up button click handler with api_name='detect'")
     detect_btn.click(
         fn=detect_objects,
         inputs=[camera_input],
@@ -144,7 +210,19 @@ with gr.Blocks(css=custom_css, title="物体認識アプリ") as demo:
     ※ YOLOv8nモデルを使用しているため、CPU環境でも高速に動作します。
     """)
 
+logger.info("✓ Gradio interface built successfully")
+
 # アプリケーションの起動
 if __name__ == "__main__":
+    logger.info("Starting application...")
+    logger.info("Enabling queue for API requests...")
     demo.queue()
-    demo.launch()
+    logger.info("✓ Queue enabled")
+
+    logger.info("Launching Gradio app...")
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        show_error=True
+    )
+    logger.info("✓ Application launched successfully")
