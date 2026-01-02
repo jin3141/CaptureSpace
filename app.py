@@ -146,4 +146,5 @@ with gr.Blocks(css=custom_css, title="物体認識アプリ") as demo:
 
 # アプリケーションの起動
 if __name__ == "__main__":
+    demo.queue()
     demo.launch()
