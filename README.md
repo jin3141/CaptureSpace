@@ -1,3 +1,14 @@
+---
+title: CaptureSpace
+emoji: 📱
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: "5.10.0"
+app_file: app.py
+pinned: false
+---
+
 # 📱 CaptureSpace - モバイル対応物体認識アプリ
 
 Hugging Face Spacesで動作する、iPhoneに最適化された物体認識Webアプリケーションです。
