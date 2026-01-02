@@ -1,0 +1,37 @@
+name: Sync to Hugging Face Spaces
+
+on:
+  push:
+    branches:
+      - main
+      - claude/object-detection-app-CBh50
+    paths:
+      - 'app.py'
+      - 'requirements.txt'
+      - '.github/workflows/sync-to-huggingface.yml'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+          # Hugging Face Spacesのリポジトリをリモートとして追加
+          git remote add space https://huggingface:${HF_TOKEN}@huggingface.co/spaces/jin3141/CaptureSpace || true
+
+          # 必要なファイルのみをコピーして新しいブランチを作成
+          git checkout -b temp-sync
+
+          # mainブランチとしてHugging Face Spacesにプッシュ
+          git push --force space temp-sync:main
