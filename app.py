@@ -130,7 +130,8 @@ with gr.Blocks(css=custom_css, title="物体認識アプリ") as demo:
     detect_btn.click(
         fn=detect_objects,
         inputs=[camera_input],
-        outputs=[output_image, output_json]
+        outputs=[output_image, output_json],
+        api_name="detect"
     )
 
     gr.Markdown("""
